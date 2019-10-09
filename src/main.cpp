@@ -25,7 +25,7 @@ extern "C" {
 
 #ifdef DEGUB_ESP
   #define DBG(x) Serial.println(x)
-#else 
+#else
   #define DBG(...)
 #endif
 
@@ -36,7 +36,7 @@ AsyncMqttClient mqttClient;
 TimerHandle_t   mqttReconnectTimer;
 TimerHandle_t   wifiReconnectTimer;
 
-Adafruit_NeoPixel strip(25, 13, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip(24, 13, NEO_GRB + NEO_KHZ800);
 
 // Create functions prior to calling them as .cpp files are differnt from Arduino .ino
 void colorWipe(void);
@@ -49,8 +49,8 @@ bool take_picture(void);
 
 void colorWipe(uint32_t color, int wait) {
   for(int i=0; i<strip.numPixels(); i++) {
-    strip.setPixelColor(i, color);        
-    strip.show();                          
+    strip.setPixelColor(i, color);
+    strip.show();
     delay(wait);
   }
 }
@@ -70,7 +70,9 @@ void onMqttConnect(bool sessionPresent) {
   delay(200);
 
   if(!packetIdPubTemp) {
+    colorWipe(strip.Color(255,0,0), 20);
     DBG("Sending Failed! err: " + String( packetIdPubTemp ));
+    colorWipe(strip.Color(0,0,0), 20);
   } else {
     DBG("MQTT Publish succesful");
   }
@@ -80,19 +82,20 @@ void onMqttConnect(bool sessionPresent) {
 
 bool take_picture() {
   DBG("Taking picture now");
-  colorWipe(strip.Color(127, 127, 127), 10);
+  colorWipe(strip.Color(127, 127, 127), 0);
   delay(500);
 
 
   fb = esp_camera_fb_get();  
   if(!fb) {
+
     DBG("Camera capture failed");
     return false;
   }
   
   DBG("Camera capture success");
   delay(200);
-  colorWipe(strip.Color(0, 0, 0), 10);
+  colorWipe(strip.Color(0, 0, 0), 0);
 
   return true;
 }
@@ -153,7 +156,7 @@ bool camera_init() {
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG; 
 
-  config.frame_size   = FRAMESIZE_HQVGA;
+  config.frame_size   = FRAMESIZE_SVGA;
   config.jpeg_quality = 12;
   config.fb_count     = 2;
 
