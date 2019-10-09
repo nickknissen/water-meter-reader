@@ -60,9 +60,10 @@ void onMqttConnect(bool sessionPresent) {
   camera_fb_t* camera_image = take_picture();
 
   // Publish picture
-  // TODO split into chunks so that larger message can be send
   //const String* pic_buf = (const String*)(camera_image->buf);
   const char* buffer = (const char*)(camera_image->buf);
+
+  const char* identifier = (const char*)(random(12345, 11232323));
 
   size_t length = camera_image->len;
   int end = PACKET_SIZE;
@@ -84,8 +85,31 @@ void onMqttConnect(bool sessionPresent) {
     Serial.print(pos);
     Serial.println();
 
-    //uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, buffer, length );
-    // send message
+    char result[100];  
+
+    strcat(result, MQTT_TOPIC);
+    strcat(result, "/");
+    strcat(result, identifier);
+    strcat(result, "/");
+    strcat(result, (const char*)pos);
+    strcat(result, ":");
+    strcat(result, (const char*)noOfPackets);
+
+    String partialBuffer = ((String) buffer).substring(start,end);
+
+    Serial.println("partialBuffer");
+
+    uint16_t packetIdPubTemp = mqttClient.publish(result, 0, false, partialBuffer.c_str(), partialBuffer.length());
+    Serial.println("packetIdPubTemp");
+
+    if(!packetIdPubTemp) {
+      colorWipe(strip.Color(255,0,0), 20);
+      DBG("Sending Failed! err: " + String( packetIdPubTemp ));
+      colorWipe(strip.Color(0,0,0), 20);
+    } else {
+      DBG("MQTT Publish succesful");
+    }
+    colorWipe(strip.Color(0,0,0), 20);
 
     end += PACKET_SIZE;
     start += PACKET_SIZE;
@@ -94,20 +118,20 @@ void onMqttConnect(bool sessionPresent) {
   
 
 
-  uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, buffer, length );
+  //uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, buffer, length );
   
-  DBG("buffer is " + String(length) + " bytes");
+  //DBG("buffer is " + String(length) + " bytes");
 
-  // No delay result in no message sent.
-  delay(200);
+  //// No delay result in no message sent.
+  //delay(200);
 
-  if(!packetIdPubTemp) {
-    colorWipe(strip.Color(255,0,0), 20);
-    DBG("Sending Failed! err: " + String( packetIdPubTemp ));
-    colorWipe(strip.Color(0,0,0), 20);
-  } else {
-    DBG("MQTT Publish succesful");
-  }
+  //if(!packetIdPubTemp) {
+  //  colorWipe(strip.Color(255,0,0), 20);
+  //  DBG("Sending Failed! err: " + String( packetIdPubTemp ));
+  //  colorWipe(strip.Color(0,0,0), 20);
+  //} else {
+  //  DBG("MQTT Publish succesful");
+  //}
   
   deep_sleep();
 }
