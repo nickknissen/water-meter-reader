@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 #include <WiFi.h>
+#include <math.h>
 #include "esp_wifi.h"
 extern "C" {
 	#include "freertos/FreeRTOS.h"
@@ -23,20 +24,19 @@ extern "C" {
 // Not using Deep Sleep on PCB because TPL5110 timer takes over.
 #define TIME_TO_SLEEP (uint64_t)10*60*1000*1000 // microseconds
 
+#define PACKET_SIZE 3000;
+
 #ifdef DEGUB_ESP
   #define DBG(x) Serial.println(x)
 #else
   #define DBG(...)
 #endif
 
-// Camera buffer, URL and picture name
-camera_fb_t *fb = NULL;
-
 AsyncMqttClient mqttClient;
 TimerHandle_t   mqttReconnectTimer;
 TimerHandle_t   wifiReconnectTimer;
 
-Adafruit_NeoPixel strip(24, 13, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip(NEOPIXEL_AMOUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Create functions prior to calling them as .cpp files are differnt from Arduino .ino
 void colorWipe(void);
@@ -44,7 +44,7 @@ void connectWiFi(void);
 void connectMQTT(void);
 void deep_sleep (void);
 bool camera_init(void);
-bool take_picture(void);
+camera_fb_t* take_picture(void);
 
 
 void colorWipe(uint32_t color, int wait) {
@@ -57,12 +57,44 @@ void colorWipe(uint32_t color, int wait) {
 
 void onMqttConnect(bool sessionPresent) {
   // Take picture
-  take_picture();
+  camera_fb_t* camera_image = take_picture();
 
   // Publish picture
-  const char* pic_buf = (const char*)(fb->buf);
-  size_t length = fb->len;
-  uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, pic_buf, length );
+  // TODO split into chunks so that larger message can be send
+  //const String* pic_buf = (const String*)(camera_image->buf);
+  const char* buffer = (const char*)(camera_image->buf);
+
+  size_t length = camera_image->len;
+  int end = PACKET_SIZE;
+  int start = 0;
+  int pos = 0;
+  //int noOfPackets = ciel(length / PACKET_SIZE);
+  int noOfPackets = ceil(length / end);
+  Serial.print("length: ");
+  Serial.print(length);
+  Serial.print(" noOfPackets: ");
+  Serial.print(noOfPackets);
+
+  while (start <= length) {
+    Serial.print(" start: ");
+    Serial.print(start);
+    Serial.print(" end: ");
+    Serial.print(end);
+    Serial.print(" pos: ");
+    Serial.print(pos);
+    Serial.println();
+
+    //uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, buffer, length );
+    // send message
+
+    end += PACKET_SIZE;
+    start += PACKET_SIZE;
+    pos++;
+  }
+  
+
+
+  uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, buffer, length );
   
   DBG("buffer is " + String(length) + " bytes");
 
@@ -80,24 +112,21 @@ void onMqttConnect(bool sessionPresent) {
   deep_sleep();
 }
 
-bool take_picture() {
+camera_fb_t* take_picture() {
   DBG("Taking picture now");
   colorWipe(strip.Color(127, 127, 127), 0);
   delay(500);
 
 
-  fb = esp_camera_fb_get();  
+  camera_fb_t* fb = esp_camera_fb_get();  
   if(!fb) {
-
     DBG("Camera capture failed");
-    return false;
   }
   
   DBG("Camera capture success");
   delay(200);
   colorWipe(strip.Color(0, 0, 0), 0);
-
-  return true;
+  return fb;
 }
 
 void deep_sleep() {

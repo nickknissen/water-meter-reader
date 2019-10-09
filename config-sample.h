@@ -27,3 +27,6 @@
 #define VSYNC_GPIO_NUM    22
 #define HREF_GPIO_NUM     26
 #define PCLK_GPIO_NUM     21
+
+#define NEOPIXEL_PIN      13 
+#define NEOPIXEL_AMOUNT   24 
