@@ -1,5 +1,6 @@
 #include <../config.h>
 #include <Arduino.h>
+#include <Adafruit_NeoPixel.h>
 #include <WiFi.h>
 #include "esp_wifi.h"
 extern "C" {
@@ -55,12 +56,24 @@ AsyncMqttClient mqttClient;
 TimerHandle_t   mqttReconnectTimer;
 TimerHandle_t   wifiReconnectTimer;
 
+Adafruit_NeoPixel strip(25, 13, NEO_GRB + NEO_KHZ800);
+
 // Create functions prior to calling them as .cpp files are differnt from Arduino .ino
+void colorWipe(void);
 void connectWiFi(void);
 void connectMQTT(void);
 void deep_sleep (void);
 bool camera_init(void);
 bool take_picture(void);
+
+
+void colorWipe(uint32_t color, int wait) {
+  for(int i=0; i<strip.numPixels(); i++) { // For each pixel in strip...
+    strip.setPixelColor(i, color);         //  Set pixel's color (in RAM)
+    strip.show();                          //  Update strip to match
+    delay(wait);                           //  Pause for a moment
+  }
+}
 
 void onMqttConnect(bool sessionPresent) {
   // Take picture
@@ -69,7 +82,7 @@ void onMqttConnect(bool sessionPresent) {
   // Publish picture
   const char* pic_buf = (const char*)(fb->buf);
   size_t length = fb->len;
-  uint16_t packetIdPubTemp = mqttClient.publish( TOPIC_PIC, 0, false, pic_buf, length );
+  uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, pic_buf, length );
   
   DBG("buffer is " + String(length) + " bytes");
 
@@ -87,6 +100,9 @@ void onMqttConnect(bool sessionPresent) {
 
 bool take_picture() {
   DBG("Taking picture now");
+  colorWipe(strip.Color(127, 127, 127), 10);
+  delay(500);
+
 
   fb = esp_camera_fb_get();  
   if(!fb) {
@@ -95,6 +111,8 @@ bool take_picture() {
   }
   
   DBG("Camera capture success");
+  delay(200);
+  colorWipe(strip.Color(0, 0, 0), 10);
 
   return true;
 }
@@ -111,16 +129,18 @@ void setup() {
     Serial.begin(115200);
     Serial.setDebugOutput(true);
   #endif
+  strip.begin(); // Initialize NeoPixel strip object (REQUIRED)
+  strip.show();  // Initialize all pixels to 'off'
 
   // COnfigure MQTT Broker and callback
   mqttReconnectTimer = xTimerCreate("mqttTimer", pdMS_TO_TICKS(2000), pdFALSE, (void*)0, reinterpret_cast<TimerCallbackFunction_t>(connectMQTT));
-  mqttClient.setCredentials(USERNAME, PASSWORD);
+  mqttClient.setCredentials(MQTT_USERNAME, MQTT_PASSWORD);
   mqttClient.onConnect (onMqttConnect);
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 
   camera_init();
   
-  esp_sleep_enable_timer_wakeup( TIME_TO_SLEEP );
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP);
 
   connectWiFi();
   connectMQTT();
