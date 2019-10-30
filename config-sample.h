@@ -3,9 +3,9 @@
 
 // MQTT Broker configuration
 #define MQTT_HOST     ""
-#define MQTT_PORT     1883 
-#define MQTT_USERNAME ""
-#define MQTT_PASSWORD ""
+#define MQTT_PORT     11883 
+#define MQTT_USERNAME "test"
+#define MQTT_PASSWORD "test"
 #define MATT_TOPIC    "water-meter"
 
 #define DEGUB_ESP

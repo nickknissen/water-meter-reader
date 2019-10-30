@@ -18,6 +18,9 @@ extern "C" {
 #include "fd_forward.h"
 #include "fr_forward.h"
 
+#include <sstream>
+#include <string>
+
 // Connection timeout;
 #define CON_TIMEOUT   10*1000 // milliseconds
 
@@ -36,6 +39,9 @@ AsyncMqttClient mqttClient;
 TimerHandle_t   mqttReconnectTimer;
 TimerHandle_t   wifiReconnectTimer;
 
+camera_fb_t *fb = NULL;
+
+
 Adafruit_NeoPixel strip(NEOPIXEL_AMOUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // Create functions prior to calling them as .cpp files are differnt from Arduino .ino
@@ -43,8 +49,9 @@ void colorWipe(void);
 void connectWiFi(void);
 void connectMQTT(void);
 void deep_sleep (void);
+void sendPackage(int start, int end, int pos, int noOfPackets, const char * buffer, long imageId);
 bool camera_init(void);
-camera_fb_t* take_picture(void);
+bool take_picture(void);
 
 
 void colorWipe(uint32_t color, int wait) {
@@ -57,100 +64,71 @@ void colorWipe(uint32_t color, int wait) {
 
 void onMqttConnect(bool sessionPresent) {
   // Take picture
-  camera_fb_t* camera_image = take_picture();
-
+  take_picture();
   // Publish picture
-  //const String* pic_buf = (const String*)(camera_image->buf);
-  const char* buffer = (const char*)(camera_image->buf);
-
-  const char* identifier = (const char*)(random(12345, 11232323));
-
-  size_t length = camera_image->len;
-  int end = PACKET_SIZE;
+  const char* data = (const char*)(fb->buf);
+  char buffer[3000] = {0};
+  size_t length = fb->len;
   int start = 0;
   int pos = 0;
-  //int noOfPackets = ciel(length / PACKET_SIZE);
-  int noOfPackets = ceil(length / end);
-  Serial.print("length: ");
-  Serial.print(length);
-  Serial.print(" noOfPackets: ");
-  Serial.print(noOfPackets);
+  int end = PACKET_SIZE;
+  size_t buffer_len = sizeof(buffer)-1;
 
   while (start <= length) {
-    Serial.print(" start: ");
-    Serial.print(start);
-    Serial.print(" end: ");
-    Serial.print(end);
-    Serial.print(" pos: ");
-    Serial.print(pos);
-    Serial.println();
+    memcpy(buffer, data + start, end);
+    DBG(buffer);
 
-    char result[100];  
-
-    strcat(result, MQTT_TOPIC);
-    strcat(result, "/");
-    strcat(result, identifier);
-    strcat(result, "/");
-    strcat(result, (const char*)pos);
-    strcat(result, ":");
-    strcat(result, (const char*)noOfPackets);
-
-    String partialBuffer = ((String) buffer).substring(start,end);
-
-    Serial.println("partialBuffer");
-
-    uint16_t packetIdPubTemp = mqttClient.publish(result, 0, false, partialBuffer.c_str(), partialBuffer.length());
-    Serial.println("packetIdPubTemp");
+    uint16_t packetIdPubTemp = mqttClient.publish(MQTT_TOPIC, 0, false, buffer, buffer_len);
 
     if(!packetIdPubTemp) {
-      colorWipe(strip.Color(255,0,0), 20);
       DBG("Sending Failed! err: " + String( packetIdPubTemp ));
-      colorWipe(strip.Color(0,0,0), 20);
     } else {
       DBG("MQTT Publish succesful");
     }
-    colorWipe(strip.Color(0,0,0), 20);
 
     end += PACKET_SIZE;
     start += PACKET_SIZE;
     pos++;
   }
-  
 
-
-  //uint16_t packetIdPubTemp = mqttClient.publish( MQTT_TOPIC, 0, false, buffer, length );
-  
-  //DBG("buffer is " + String(length) + " bytes");
-
-  //// No delay result in no message sent.
-  //delay(200);
-
-  //if(!packetIdPubTemp) {
-  //  colorWipe(strip.Color(255,0,0), 20);
-  //  DBG("Sending Failed! err: " + String( packetIdPubTemp ));
-  //  colorWipe(strip.Color(0,0,0), 20);
-  //} else {
-  //  DBG("MQTT Publish succesful");
-  //}
-  
   deep_sleep();
 }
 
-camera_fb_t* take_picture() {
+void sendPackage(int start, int end, int pos, int noOfPackets, const char * buffer, long imageId) {
+  DBG("start: " + String(start) + ", end: " + String(end) + ", pos" + String(pos));
+
+  String message = "{\"imageId\": "+ String(imageId) +", \"data\": \""+ buffer +"\", \"pos\": "+pos+", \"size\": "+ String(noOfPackets)+"}";
+
+  String message2 = ""+String(imageId)+":" + buffer;
+
+  uint16_t packetIdPubTemp = mqttClient.publish(MQTT_TOPIC, 0, false, message.c_str(), message.length());
+
+  if(!packetIdPubTemp) {
+    colorWipe(strip.Color(255,0,0), 20);
+    DBG("Sending Failed! err: " + String( packetIdPubTemp ));
+    colorWipe(strip.Color(0,0,0), 20);
+  } else {
+    DBG("MQTT Publish succesful");
+  }
+  colorWipe(strip.Color(0,0,0), 20);
+
+}
+
+bool take_picture() {
   DBG("Taking picture now");
   colorWipe(strip.Color(127, 127, 127), 0);
   delay(500);
 
-
-  camera_fb_t* fb = esp_camera_fb_get();  
+  fb = esp_camera_fb_get();  
   if(!fb) {
     DBG("Camera capture failed");
+    return false;
   }
   
   DBG("Camera capture success");
   delay(200);
   colorWipe(strip.Color(0, 0, 0), 0);
-  return fb;
+  return true;
 }
 
 void deep_sleep() {
@@ -209,7 +187,7 @@ bool camera_init() {
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG; 
 
-  config.frame_size   = FRAMESIZE_SVGA;
+  config.frame_size   = FRAMESIZE_QQVGA2;
   config.jpeg_quality = 12;
   config.fb_count     = 2;
 
